@@ -47,15 +47,15 @@ private:
 
     MotionSwitcherClient msc;
 
-    unitree_go::msg::dds_::LowCmd_ low_cmd{};      // default init
-    unitree_go::msg::dds_::LowState_ low_state{};  // default init
+    unitree_go::msg::dds_::LowCmd_ low_cmd{};      // 默认初始化。
+    unitree_go::msg::dds_::LowState_ low_state{};  // 默认初始化。
 
-    /*publisher*/
+    /*发布器。*/
     ChannelPublisherPtr<unitree_go::msg::dds_::LowCmd_> lowcmd_publisher;
-    /*subscriber*/
+    /*订阅器。*/
     ChannelSubscriberPtr<unitree_go::msg::dds_::LowState_> lowstate_subscriber;
 
-    /*LowCmd write thread*/
+    /*LowCmd 写入线程。*/
     ThreadPtr lowCmdWriteThreadPtr;
 
     float _targetPos_1[12] = {0.0, 1.36, -2.65, 0.0, 1.36, -2.65,
@@ -117,18 +117,18 @@ void Custom::Init()
 {
     InitLowCmd();
 
-    /*create publisher*/
+    /*创建发布器。*/
     lowcmd_publisher.reset(new ChannelPublisher<unitree_go::msg::dds_::LowCmd_>(TOPIC_LOWCMD));
     lowcmd_publisher->InitChannel();
 
-    /*create subscriber*/
+    /*创建订阅器。*/
     lowstate_subscriber.reset(new ChannelSubscriber<unitree_go::msg::dds_::LowState_>(TOPIC_LOWSTATE));
     lowstate_subscriber->InitChannel(std::bind(&Custom::LowStateMessageHandler, this, std::placeholders::_1), 1);
 
-    /*init MotionSwitcherClient*/
+    /*初始化 MotionSwitcherClient。*/
     msc.SetTimeout(10.0f); 
     msc.Init();
-    /*Shut down motion control-related service*/
+    /*关闭运动控制相关服务。*/
     while(queryMotionStatus())
     {
         std::cout << "Try to deactivate the motion control-related service." << std::endl;
@@ -151,7 +151,7 @@ void Custom::InitLowCmd()
 
     for(int i=0; i<20; i++)
     {
-        low_cmd.motor_cmd()[i].mode() = (0x01);   // motor switch to servo (PMSM) mode
+        low_cmd.motor_cmd()[i].mode() = (0x01);   // 电机切换到伺服 PMSM 模式。
         low_cmd.motor_cmd()[i].q() = (PosStopF);
         low_cmd.motor_cmd()[i].kp() = (0);
         low_cmd.motor_cmd()[i].dq() = (VelStopF);
@@ -202,7 +202,7 @@ std::string Custom::queryServiceName(std::string form,std::string name)
 
 void Custom::Start()
 {
-    /*loop publishing thread*/
+    /*循环发布线程。*/
     lowCmdWriteThreadPtr = CreateRecurrentThreadEx("writebasiccmd", UT_CPU_ID_NONE, 2000, &Custom::LowCmdWrite, this);
 }
 

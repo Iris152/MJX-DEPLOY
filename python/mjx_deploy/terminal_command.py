@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-The initial author of this file is [YixuanQiu](https://github.com/YixuanQiu).
-The contents have since been modified.
+本文件初始作者为 YixuanQiu。
+当前版本已在原始内容基础上做过修改。
 """
 
 import argparse
@@ -22,33 +22,33 @@ from geometry_msgs.msg import PointStamped
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-# Constants
-MAX_LINEAR_SPEED = 1.5  # m/s
-MAX_LATERAL_SPEED = 0.8  # m/s
-MAX_ANGULAR_SPEED = 1.5  # rad/s
+# 控制限幅常量
+MAX_LINEAR_SPEED = 1.5  # 纵向速度上限（m/s）
+MAX_LATERAL_SPEED = 0.8  # 侧向速度上限（m/s）
+MAX_ANGULAR_SPEED = 1.5  # 角速度上限（rad/s）
 SPEED_INCREMENT = 0.1
 
-# Key mappings
-KEY_UP = "\x1b[A"  # Forward (increase vx)
-KEY_DOWN = "\x1b[B"  # Backward (decrease vx)
-KEY_RIGHT = "\x1b[C"  # Strafe right (decrease vy)
-KEY_LEFT = "\x1b[D"  # Strafe left (increase vy)
-KEY_A = "a"  # Turn left (positive wz)
-KEY_D = "d"  # Turn right (negative wz)
-KEY_Q = "q"  # Quit
-KEY_SPACE = " "  # Stop (zero all commands)
+# 键盘按键映射
+KEY_UP = "\x1b[A"  # 前进，增大 vx
+KEY_DOWN = "\x1b[B"  # 后退，减小 vx
+KEY_RIGHT = "\x1b[C"  # 向右横移，减小 vy
+KEY_LEFT = "\x1b[D"  # 向左横移，增大 vy
+KEY_A = "a"  # 左转，增大 wz
+KEY_D = "d"  # 右转，减小 wz
+KEY_Q = "q"  # 退出
+KEY_SPACE = " "  # 停止，清零所有速度指令
 KEY_CTRL_C = "\x03"
 
 
-# For non-blocking key detection
+# 读取单个按键，配合终端原始模式实现非阻塞式控制体验。
 def getch():
-    """Gets a single character from standard input, does not echo to the screen."""
+    """从标准输入读取一个字符，并且不回显到屏幕。"""
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(sys.stdin.fileno())
         ch = sys.stdin.read(1)
-        # Handle arrow keys (they send multiple chars)
+        # 方向键会发送多个字符，需要一次性拼完整。
         if ch == "\x1b":
             ch = ch + sys.stdin.read(2)
     finally:
@@ -60,12 +60,12 @@ class KeyboardController(Node):
     def __init__(self, ctrl_mode: str):
         super().__init__("keyboard_controller")
 
-        # Control state - velocity commands
-        self.forward_speed = 0.0  # vx (m/s)
-        self.lateral_speed = 0.0  # vy (m/s)
-        self.angular_speed = 0.0  # wz (rad/s)
+        # 当前速度指令状态
+        self.forward_speed = 0.0  # vx，纵向速度（m/s）
+        self.lateral_speed = 0.0  # vy，侧向速度（m/s）
+        self.angular_speed = 0.0  # wz，偏航角速度（rad/s）
 
-        # Create ROS2 publisher for velocity commands (vx, vy, wz)
+        # 创建 ROS2 速度指令发布器，消息中携带 vx、vy、wz。
         if ctrl_mode == "diffloco":
             self.command_publisher = self.create_publisher(
                 PointStamped, "/velocity_command", 10
@@ -73,43 +73,43 @@ class KeyboardController(Node):
         else:
             raise ValueError("Invalid control mode. Use 'diffloco'.")
 
-        # Create command messages
-        self.command_msg = PointStamped()  # Velocity command (point.x=vx, point.y=vy, point.z=wz)
+        # 创建速度指令消息，point.x/y/z 分别对应 vx、vy、wz。
+        self.command_msg = PointStamped()
 
-        # Initialize velocity command (vx, vy, wz)
-        self.command_msg.point.x = 0.0  # forward speed (vx)
-        self.command_msg.point.y = 0.0  # lateral speed (vy)
-        self.command_msg.point.z = 0.0  # angular speed (wz)
+        # 初始化速度指令为零。
+        self.command_msg.point.x = 0.0  # 纵向速度 vx
+        self.command_msg.point.y = 0.0  # 侧向速度 vy
+        self.command_msg.point.z = 0.0  # 偏航角速度 wz
 
-        # Thread control
+        # 发布线程状态
         self.running = False
         self.publish_thread = None
         self._cleaned_up = False
 
-        # Initialize to handle terminal resize and exit cleanly
+        # 注册信号处理，保证终端尺寸变化和退出时状态可恢复。
         signal.signal(signal.SIGWINCH, self.handle_resize)
         signal.signal(signal.SIGINT, self.handle_interrupt)
         signal.signal(signal.SIGTERM, self.handle_interrupt)
 
     def handle_resize(self, *args):
-        """Handle terminal resize events"""
-        # Re-draw the UI
+        """处理终端尺寸变化事件。"""
+        # 重新绘制控制界面。
         self.clear_screen()
         self.draw_control_state()
 
     def handle_interrupt(self, *args):
-        """Handle interrupt signals"""
+        """处理退出信号。"""
         self.running = False
 
     def clear_screen(self):
-        """Clear the terminal screen"""
+        """清空终端屏幕。"""
         os.system("clear")
 
     def draw_control_state(self):
-        """Draw the current state to the terminal"""
+        """在终端绘制当前控制状态。"""
         self.clear_screen()
 
-        # Draw text instructions and status
+        # 组装终端提示和当前速度状态。
         instructions = [
             "Go2 Locomotion Control - Terminal Version",
             "",
@@ -125,7 +125,7 @@ class KeyboardController(Node):
             "=== CURRENT MOVEMENT ===",
         ]
 
-        # Show current movement direction
+        # 根据速度正负显示当前运动方向。
         movement_status = []
         if self.forward_speed > 0:
             movement_status.append(f"FORWARD ({self.forward_speed:.2f} m/s)")
@@ -161,108 +161,108 @@ class KeyboardController(Node):
             ]
         )
 
-        # Print all instructions
+        # 输出完整终端界面。
         print("\n".join(instructions))
 
     def clear_all_commands(self):
-        """Reset all speeds to zero"""
+        """将所有速度指令清零。"""
         self.forward_speed = 0.0
         self.lateral_speed = 0.0
         self.angular_speed = 0.0
 
     def update_speed_from_key(self, key):
-        """Update speeds based on key press with conflict resolution"""
-        # Velocity controls
-        if key == KEY_UP:  # Forward
+        """根据按键更新速度，并做限幅处理。"""
+        # 纵向和侧向速度控制。
+        if key == KEY_UP:  # 前进
             self.forward_speed = min(
                 self.forward_speed + SPEED_INCREMENT, MAX_LINEAR_SPEED
             )
-        elif key == KEY_DOWN:  # Backward
+        elif key == KEY_DOWN:  # 后退
             self.forward_speed = max(
                 self.forward_speed - SPEED_INCREMENT, -MAX_LINEAR_SPEED
             )
-        elif key == KEY_LEFT:  # Strafe left
+        elif key == KEY_LEFT:  # 向左横移
             self.lateral_speed = min(
                 self.lateral_speed + SPEED_INCREMENT, MAX_LATERAL_SPEED
             )
-        elif key == KEY_RIGHT:  # Strafe right
+        elif key == KEY_RIGHT:  # 向右横移
             self.lateral_speed = max(
                 self.lateral_speed - SPEED_INCREMENT, -MAX_LATERAL_SPEED
             )
-        # Angular velocity controls (wz)
-        elif key == KEY_A:  # Turn left (positive wz)
+        # 偏航角速度控制。
+        elif key == KEY_A:  # 左转，wz 为正
             self.angular_speed = min(
                 self.angular_speed + SPEED_INCREMENT, MAX_ANGULAR_SPEED
             )
-        elif key == KEY_D:  # Turn right (negative wz)
+        elif key == KEY_D:  # 右转，wz 为负
             self.angular_speed = max(
                 self.angular_speed - SPEED_INCREMENT, -MAX_ANGULAR_SPEED
             )
-        elif key == KEY_SPACE:  # Clear all commands
+        elif key == KEY_SPACE:  # 清零所有指令
             self.clear_all_commands()
 
     def publish_command(self):
-        """Publish velocity commands (vx, vy, wz) to the locomotion node"""
-        # Set velocities in the velocity command message
+        """向运动控制节点发布速度指令。"""
+        # 将当前速度写入 ROS2 消息。
         self.command_msg.header.stamp = self.get_clock().now().to_msg()
         self.command_msg.point.x = float(self.forward_speed)  # vx
         self.command_msg.point.y = float(self.lateral_speed)  # vy
         self.command_msg.point.z = float(self.angular_speed)  # wz
 
-        # Publish the velocity command
+        # 发布速度指令。
         self.command_publisher.publish(self.command_msg)
 
     def publisher_thread_function(self):
-        """Function that runs in the publisher thread"""
+        """发布线程的循环函数。"""
         while self.running and rclpy.ok():
             self.publish_command()
-            time.sleep(0.02)  # 50 Hz
+            time.sleep(0.02)  # 50 赫兹
 
     def cleanup(self):
-        """Clean up before exit"""
+        """退出前清理终端并发送零速度。"""
         if self._cleaned_up:
             return
         self._cleaned_up = True
 
-        # Send zero commands
+        # 退出前发送零速度指令。
         self.forward_speed = 0.0
         self.lateral_speed = 0.0
         self.angular_speed = 0.0
         if rclpy.ok():
             self.publish_command()
 
-        # Restore terminal
+        # 恢复终端状态。
         os.system("stty sane")
-        print("\033[?25h")  # Show cursor
+        print("\033[?25h")  # 显示光标
 
     def run(self):
-        """Main control loop"""
+        """主控制循环。"""
         self.running = True
 
         try:
-            # Hide cursor
+            # 隐藏光标，减少界面闪烁。
             print("\033[?25l")
 
-            # Start publisher thread
+            # 启动速度指令发布线程。
             self.publish_thread = threading.Thread(
                 target=self.publisher_thread_function
             )
             self.publish_thread.daemon = True
             self.publish_thread.start()
 
-            # Draw the initial UI
+            # 绘制初始界面。
             self.draw_control_state()
 
-            # Main input loop - process one key at a time
+            # 主输入循环，每次处理一个按键。
             while self.running and rclpy.ok():
                 key = getch()
 
-                # Process key
-                if key == KEY_Q or key == KEY_CTRL_C:  # q or Ctrl+C
+                # 处理退出按键。
+                if key == KEY_Q or key == KEY_CTRL_C:  # q 或 Ctrl+C
                     self.running = False
                     break
 
-                # Update speed based on key press
+                # 根据按键更新速度指令。
                 if key in [
                     KEY_UP,
                     KEY_DOWN,
@@ -296,7 +296,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Initialize ROS2
+    # 初始化 ROS2。
     rclpy.init()
 
     controller = KeyboardController(ctrl_mode=args.control)

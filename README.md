@@ -10,6 +10,7 @@ The repository includes:
 - Python build/run helpers: `python/mjx_deploy`
 - Official Unitree Go2 stand example: `examples/unitree_sdk2/go2_stand_example.cpp`
 - Full laptop-to-real-Go2 instructions: `docs/AHAC_GO2_DEPLOYMENT.md`
+- Local MuJoCo + SDK2 deployment-flow simulator: `docs/AHAC_MUJOCO_SDK2_SIM_TEST.md`
 
 Quick start on the deployment laptop:
 
@@ -38,6 +39,17 @@ Then start AHAC:
 python -m mjx_deploy.ahac_go2_deploy run --interface eth0 --command-source terminal --build-if-missing
 ```
 
+For local sim-to-deploy validation before touching the real robot, use two
+terminals on loopback DDS:
+
+```bash
+python -m mjx_deploy.ahac_go2_deploy sim --interface lo --domain-id 1 --build-if-missing
+python -m mjx_deploy.ahac_go2_deploy run --interface lo --domain-id 1 --command-source terminal --build-if-missing
+```
+
+The simulator opens a MuJoCo viewer and uses C++ `unitree_sdk2` topics, so the
+existing AHAC deployment state machine is exercised through `rt/lowstate` and
+`rt/lowcmd`.
+
 Keep the robot supported for first tests and keep the physical emergency stop
 ready.
-

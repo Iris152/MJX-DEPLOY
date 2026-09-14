@@ -1,2 +1,1 @@
-"""Utilities for deploying exported MJX/Open-DiffLoco Go2 policies."""
-
+"""部署已导出的 MJX/Open-DiffLoco Go2 策略的辅助工具。"""

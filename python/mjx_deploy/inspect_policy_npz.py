@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print compact metadata for an exported deployment .npz policy."""
+"""打印已导出的 .npz 部署策略元数据。"""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import numpy as np
 
 
 def main() -> int:
+    """读取策略文件并输出网络结构、观测维度和控制范围。"""
     parser = argparse.ArgumentParser(description="Inspect an exported MJX/Open-DiffLoco deployment policy.")
     parser.add_argument("policy", nargs="?", default="policies/ahac_go2_blind_nolinvel_nokinref/policy_best_tracking_deploy.npz")
     args = parser.parse_args()
@@ -39,4 +40,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

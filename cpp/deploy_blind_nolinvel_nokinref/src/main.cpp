@@ -1,9 +1,9 @@
-/// @file main.cpp
-/// Deploy SHAC/JAVE/AHAC policy on Unitree Go2.
+/// 文件：main.cpp
+/// 在 Unitree Go2 上部署 SHAC、JAVE 或 AHAC 策略。
 ///
-/// Usage:
-///   deploy_blind_nolinvel_nokinref --policy policy_deploy.npz --interface lo --domain-id 1
-///   deploy_blind_nolinvel_nokinref --policy policy_deploy.npz --interface enp3s0
+/// 用法：
+/// 仿真示例：deploy_blind_nolinvel_nokinref --policy policy_deploy.npz --interface lo --domain-id 1
+/// 实机示例：deploy_blind_nolinvel_nokinref --policy policy_deploy.npz --interface enp3s0
 
 #include "controller.hpp"
 #include "policy.hpp"

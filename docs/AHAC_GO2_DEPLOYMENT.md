@@ -100,6 +100,43 @@ Only build with ROS2 if you need a `/velocity_command` command topic:
 python -m mjx_deploy.ahac_go2_deploy build --ros2 --build-dir build-ros2
 ```
 
+## 3A. Optional MuJoCo Deployment-Flow Test
+
+Before connecting to the real Go2, you can validate the same C++ deployment
+state machine against a local C++ MuJoCo + SDK2 simulator. The simulator runs as
+the low-level hardware side, publishes `rt/lowstate`, subscribes `rt/lowcmd`, and
+opens a MuJoCo viewer for live inspection.
+
+Build the simulator:
+
+```bash
+python -m mjx_deploy.ahac_go2_deploy build-sim
+```
+
+Terminal B starts the simulated Go2 low-level side:
+
+```bash
+python -m mjx_deploy.ahac_go2_deploy sim \
+  --interface lo \
+  --domain-id 1 \
+  --build-if-missing
+```
+
+Terminal A starts the normal AHAC deployment controller against the simulator:
+
+```bash
+python -m mjx_deploy.ahac_go2_deploy run \
+  --interface lo \
+  --domain-id 1 \
+  --command-source terminal \
+  --build-if-missing
+```
+
+Then press empty Enter twice to move through `IDLE -> STANDUP -> READY ->
+WALKING`, use `w/s/a/d/q/e/0` to test commands, use `x` for `ESTOP`, and use
+`Ctrl-C` to test sit-down. See `docs/AHAC_MUJOCO_SDK2_SIM_TEST.md` for the full
+checklist and viewer controls.
+
 ## 4. Identify the Robot Network Interface
 
 Run:
@@ -121,8 +158,8 @@ python -m mjx_deploy.ahac_go2_deploy stand-example \
 ```
 
 The upstream example prints `WARNING: Make sure the robot is hung up or lying on
-the ground.` Follow that warning. This file is intentionally unchanged from the
-official SDK example, except for its location inside this repository.
+the ground.` Follow that warning. The control logic follows the official SDK
+example; comments in the local copy have been translated to Chinese.
 
 ## 6. Dry-Run AHAC Launch
 
@@ -228,4 +265,3 @@ python -m mjx_deploy.wireless_command \
   exported command ranges and that the `.npz` file is the packaged AHAC policy.
 - Use `--kp` and `--kd` only for controlled troubleshooting. The default walking
   gains come from `policy_best_tracking_deploy.npz`.
-

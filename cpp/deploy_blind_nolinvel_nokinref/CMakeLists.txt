@@ -4,9 +4,8 @@ project(deploy_blind_nolinvel_nokinref LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Dependencies. The top-level CMake file also loads these when this directory is
-# included as part of MJX-DEPLOY; keeping the finds here allows standalone builds
-# from this subdirectory too.
+# 依赖项。顶层 CMake 引入本目录时也会加载这些依赖；这里保留查找逻辑，
+# 便于直接从当前子目录单独构建。
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
@@ -18,7 +17,7 @@ if(OPEN_DIFFLOCO_ENABLE_ROS2)
   find_package(geometry_msgs REQUIRED)
 endif()
 
-# Core library (policy inference)
+# 策略推理核心库。
 add_library(deploy_blind_nolinvel_nokinref_core
     src/policy.cpp
 )
@@ -27,7 +26,7 @@ target_include_directories(deploy_blind_nolinvel_nokinref_core PUBLIC
 )
 target_link_libraries(deploy_blind_nolinvel_nokinref_core PUBLIC Eigen3::Eigen ZLIB::ZLIB)
 
-# Controller library (state machine + DDS)
+# 低层控制库，包含状态机和 DDS 通信。
 add_library(deploy_blind_nolinvel_nokinref_controller
     src/controller.cpp
 )
@@ -37,6 +36,6 @@ if(OPEN_DIFFLOCO_ENABLE_ROS2)
   ament_target_dependencies(deploy_blind_nolinvel_nokinref_controller PUBLIC rclcpp geometry_msgs)
 endif()
 
-# Deployment executable
+# 部署可执行文件。
 add_executable(deploy_blind_nolinvel_nokinref src/main.cpp)
 target_link_libraries(deploy_blind_nolinvel_nokinref PRIVATE deploy_blind_nolinvel_nokinref_controller)

@@ -5,11 +5,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(MJX_DEPLOY_ENABLE_ROS2 "Enable ROS2 /velocity_command support" OFF)
+option(MJX_DEPLOY_BUILD_CONTROLLER "Build AHAC deployment controller" ON)
 option(MJX_DEPLOY_BUILD_STAND_EXAMPLE "Build Unitree Go2 stand example" ON)
+option(MJX_DEPLOY_BUILD_MUJOCO_SIM "Build C++ MuJoCo + SDK2 simulation bridge" OFF)
 
 set(OPEN_DIFFLOCO_ENABLE_ROS2 ${MJX_DEPLOY_ENABLE_ROS2} CACHE BOOL "" FORCE)
 
-add_subdirectory(cpp/deploy_blind_nolinvel_nokinref)
+if(MJX_DEPLOY_BUILD_CONTROLLER)
+  add_subdirectory(cpp/deploy_blind_nolinvel_nokinref)
+endif()
 
 if(MJX_DEPLOY_BUILD_STAND_EXAMPLE)
   find_package(unitree_sdk2 REQUIRED)
@@ -17,3 +21,6 @@ if(MJX_DEPLOY_BUILD_STAND_EXAMPLE)
   target_link_libraries(go2_stand_example PRIVATE unitree_sdk2)
 endif()
 
+if(MJX_DEPLOY_BUILD_MUJOCO_SIM)
+  add_subdirectory(cpp/mujoco_sdk2_sim)
+endif()

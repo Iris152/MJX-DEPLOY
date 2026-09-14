@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-The initial author of this file is [YixuanQiu](https://github.com/YixuanQiu).
-The contents have since been modified.
+本文件初始作者为 YixuanQiu。
+当前版本已在原始内容基础上做过修改。
 """
 
 import argparse
@@ -15,28 +15,26 @@ from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
 
-# Uncomment the following two lines when using Go2、Go2-W、B2、B2-W、H1 robot
-# from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowState_
-# from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
-# Uncomment the following two lines when using G1、H1-2 robot
+# 当前部署目标是 Go2，因此使用 unitree_go 的低层状态消息类型。
+# 使用 G1、H1-2 时需要改成对应机型的消息类型。
 from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowState_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
 
-# Constants
-MAX_LINEAR_SPEED = 2.5  # m/s
-MAX_LATERAL_SPEED = 1.5  # m/s
-MAX_ANGULAR_SPEED = 3.0  # rad/s
+# 遥控器速度映射上限。
+MAX_LINEAR_SPEED = 2.5  # 纵向速度上限（m/s）
+MAX_LATERAL_SPEED = 1.5  # 侧向速度上限（m/s）
+MAX_ANGULAR_SPEED = 3.0  # 角速度上限（rad/s）
 
 
 class unitreeRemoteController:
     def __init__(self):
-        # Analog stick values
-        self.Lx = 0.0  # Left stick X (strafe)
-        self.Ly = 0.0  # Left stick Y (forward/backward)
-        self.Rx = 0.0  # Right stick X (turn)
-        self.Ry = 0.0  # Right stick Y (unused)
+        # 摇杆状态。
+        self.Lx = 0.0  # 左摇杆 X 轴，控制横移
+        self.Ly = 0.0  # 左摇杆 Y 轴，控制前进/后退
+        self.Rx = 0.0  # 右摇杆 X 轴，控制转向
+        self.Ry = 0.0  # 右摇杆 Y 轴，当前未使用
 
-        # Button states
+        # 按键状态。
         self.L1 = 0
         self.L2 = 0
         self.R1 = 0
@@ -94,7 +92,7 @@ class WirelessController(Node):
         self.low_state = None
         self.remoteController = unitreeRemoteController()
 
-        # Create ROS2 publisher based on control mode. DiffLoco listens to /velocity_command.
+        # 根据控制模式创建 ROS2 发布器，DiffLoco 默认监听 /velocity_command。
         if ctrl_mode == "diffloco":
             topic = command_topic
         elif ctrl_mode == "loco":
@@ -106,13 +104,13 @@ class WirelessController(Node):
         self.command_publisher = self.create_publisher(PointStamped, topic, 10)
         self.command_topic = topic
 
-        # Create command messages
-        self.command_msg = PointStamped()  # Velocity command (point.x=vx, point.y=vy, point.z=wz)
+        # 创建速度指令消息，point.x/y/z 分别对应 vx、vy、wz。
+        self.command_msg = PointStamped()
 
-        # Timer for publishing commands at regular intervals
-        self.timer = self.create_timer(0.02, self.publish_command)  # 50 Hz
+        # 定时发布速度指令。
+        self.timer = self.create_timer(0.02, self.publish_command)  # 50 赫兹
 
-        # Deadzone for analog sticks
+        # 摇杆死区，抑制轻微漂移。
         self.deadzone = 0.1
 
         self.smoothed_forward = 0.0
@@ -125,7 +123,7 @@ class WirelessController(Node):
         self.lowstate_subscriber.Init(self.LowStateMessageHandler, 10)
 
     def apply_deadzone(self, value, deadzone=None):
-        """Apply deadzone to analog input"""
+        """对摇杆输入应用死区。"""
         if deadzone is None:
             deadzone = self.deadzone
         if abs(value) < deadzone:
@@ -138,21 +136,19 @@ class WirelessController(Node):
         self.remoteController.parse(wireless_remote_data)
 
     def publish_command(self):
-        """Publish movement command based on controller input"""
+        """根据遥控器输入发布速度指令。"""
         if self.low_state is None:
             return
 
-        # Apply deadzone to stick inputs
-        # Left stick: velocity commands (vx, vy)
-        forward_input = self.apply_deadzone(self.remoteController.Ly)  # Positive for forward
-        lateral_input = self.apply_deadzone(-self.remoteController.Lx)  # Left stick X for strafe
+        # 对摇杆输入应用死区。
+        # 左摇杆控制 vx 和 vy。
+        forward_input = self.apply_deadzone(self.remoteController.Ly)  # 正值表示前进
+        lateral_input = self.apply_deadzone(-self.remoteController.Lx)  # 左摇杆 X 轴控制横移
         
-        # Right stick: angular velocity (wz)
-        angular_input = self.apply_deadzone(-self.remoteController.Rx)  # Right stick X for turning (wz)
+        # 右摇杆 X 轴控制偏航角速度 wz。
+        angular_input = self.apply_deadzone(-self.remoteController.Rx)
 
-        # Crispy control: instant zero on release, smooth ramp-up otherwise
-        # If input is zero (stick released), immediately set to zero
-        # Otherwise, apply smoothing for gradual acceleration
+        # 松杆时立即归零，推杆时做平滑加速，避免速度突变。
         if forward_input == 0.0:
             self.smoothed_forward = 0.0
         else:
@@ -176,7 +172,7 @@ class WirelessController(Node):
         
 
 
-        # Map controller inputs to velocities (vx, vy, wz)
+        # 将摇杆输入映射为 vx、vy、wz 速度指令。
         self.command_msg.header.stamp = self.get_clock().now().to_msg()
         self.command_msg.point.x = float(self.smoothed_forward * MAX_LINEAR_SPEED)  # vx
         self.command_msg.point.y = float(self.smoothed_lateral * MAX_LATERAL_SPEED)  # vy
@@ -212,24 +208,24 @@ if __name__ == "__main__":
     print("- Right stick: Turn Left/Right - wz (X-axis)")
     print(f"- ROS command topic: {args.topic if args.control == 'diffloco' else args.control}")
 
-    # Initialize Unitree SDK
+    # 初始化 Unitree SDK。
     print(f"Using network interface: {args.net}")
     ChannelFactoryInitialize(0, args.net)
 
-    # Initialize ROS2
+    # 初始化 ROS2。
     rclpy.init()
 
-    # Create controller instance
+    # 创建遥控器桥接节点。
     controller = WirelessController(ctrl_mode=args.control, command_topic=args.topic)
     controller.Init()
 
     try:
-        # Spin ROS2 node
+        # 运行 ROS2 节点。
         rclpy.spin(controller)
     except KeyboardInterrupt:
         print("Keyboard interrupt received, shutting down")
     finally:
-        # Send zero commands before shutdown
+        # 退出前发送零速度指令。
         controller.command_msg.header.stamp = controller.get_clock().now().to_msg()
         controller.command_msg.point.x = 0.0
         controller.command_msg.point.y = 0.0

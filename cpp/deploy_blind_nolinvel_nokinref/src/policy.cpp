@@ -1,4 +1,4 @@
-/// @file policy.cpp
+/// 文件：policy.cpp
 #include "policy.hpp"
 #include "math_utils.hpp"
 #include "npz_reader.hpp"
@@ -10,7 +10,7 @@
 
 namespace jave {
 
-//  helpers
+// 辅助函数。
 
 namespace {
 
@@ -46,19 +46,19 @@ Eigen::Vector2d load_range_or_default(const npz::NpzFile &npz,
   return Eigen::Vector2d(v(0), v(1));
 }
 
-} // namespace
+} // 匿名命名空间
 
-//  Construction
+// 构造函数。
 
 NumpyPolicy::NumpyPolicy(const std::string &npz_path) {
   std::cout << "Loading policy: " << npz_path << "\n";
   auto npz = npz::load_npz(npz_path);
 
-  // Normalizer
+  // 观测归一化统计量。
   norm_mean = load_vec(npz, "norm_mean");
   norm_var = load_vec(npz, "norm_var");
 
-  // Network layers
+  // 网络层权重。
   const int n_hidden = static_cast<int>(load_scalar(npz, "n_hidden"));
   layers_.resize(n_hidden);
   for (int i = 0; i < n_hidden; ++i) {
@@ -71,7 +71,7 @@ NumpyPolicy::NumpyPolicy(const std::string &npz_path) {
   out_kernel_ = load_mat(npz, "dense_" + std::to_string(n_hidden) + "_kernel");
   out_bias_ = load_vec(npz, "dense_" + std::to_string(n_hidden) + "_bias");
 
-  // Print architecture
+  // 打印网络结构。
   const int in_dim = static_cast<int>(layers_[0].kernel.rows());
   const int out_dim = static_cast<int>(out_kernel_.cols());
   std::cout << "  Actor: " << in_dim;
@@ -81,7 +81,7 @@ NumpyPolicy::NumpyPolicy(const std::string &npz_path) {
   std::cout << "  Hidden layers: " << n_hidden
             << " (each Dense + LayerNorm + ELU)\n";
 
-  // Environment config
+  // 环境配置。
   default_joints = load_vec(npz, "default_joints");
   action_scale = load_vec(npz, "action_scale");
   dt = load_scalar(npz, "dt");
@@ -115,7 +115,7 @@ NumpyPolicy::NumpyPolicy(const std::string &npz_path) {
             << cmd_yaw_rate_range(0) << ", " << cmd_yaw_rate_range(1)
             << "]\n";
 
-  // Actuator gains
+  // 电机增益。
   if (npz::has_key(npz, "actuator_kp")) {
     training_kp = load_vec(npz, "actuator_kp")(0);
     double kd_act = npz::has_key(npz, "actuator_kd")
@@ -133,7 +133,7 @@ NumpyPolicy::NumpyPolicy(const std::string &npz_path) {
   }
 }
 
-//  Forward pass
+// 前向推理。
 
 Eigen::VectorXd NumpyPolicy::operator()(const Eigen::VectorXd &obs) const {
   if (obs.size() != actor_history_len * actor_frame_obs_dim)
@@ -151,28 +151,28 @@ Eigen::VectorXd NumpyPolicy::operator()(const Eigen::VectorXd &obs) const {
 Eigen::VectorXd NumpyPolicy::forward_raw(const Eigen::VectorXd &x_in) const {
   Eigen::VectorXd x = x_in;
 
-  // Hidden layers: Dense --> LayerNorm --> ELU
+  // 隐藏层：全连接层 --> 层归一化 --> ELU 激活。
   for (const auto &L : layers_) {
-    x = (x.transpose() * L.kernel).transpose() + L.bias; // Dense
-    x = layer_norm(x, L.ln_scale, L.ln_bias);            // LN
-    x = elu(x);                                          // ELU
+    x = (x.transpose() * L.kernel).transpose() + L.bias; // 全连接层。
+    x = layer_norm(x, L.ln_scale, L.ln_bias);            // 层归一化。
+    x = elu(x);                                          // ELU 激活。
   }
 
-  // Output layer: Dense --> tanh
+  // 输出层：全连接层 --> tanh。
   x = (x.transpose() * out_kernel_).transpose() + out_bias_;
   return tanh_vec(x);
 }
 
-//  Target joints
+// 目标关节位置。
 
 Eigen::VectorXd
 NumpyPolicy::get_target_joints(const Eigen::VectorXd &action) const {
   Eigen::VectorXd a = action.cwiseMax(-1.0).cwiseMin(1.0);
-  // action_scale may be scalar (1,) or per-joint (12,)
+  // action_scale 可以是标量，也可以是逐关节 12 维向量。
   if (action_scale.size() == 1) {
     return default_joints + a * action_scale(0);
   }
   return default_joints + a.cwiseProduct(action_scale);
 }
 
-} // namespace jave
+} // 命名空间 jave

@@ -1,10 +1,9 @@
 #pragma once
-/// @file npz_reader.hpp
-/// Minimal .npz / .npy reader supporting numpy format v1.0 AND v2.0.
-/// Replaces cnpy which only handles v1.0 and crashes on v2.0 headers.
+/// 文件：npz_reader.hpp
+/// 最小化 .npz / .npy 读取器，支持 numpy v1.0 和 v2.0 格式。
+/// 用于替代只支持 v1.0 且遇到 v2.0 头部会崩溃的 cnpy。
 ///
-/// Only supports: reading, little-endian float32/float64, C-order arrays.
-/// That's all we need for policy deployment.
+/// 仅支持读取、小端 float32/float64，以及 C 顺序数组；策略部署只需要这些能力。
 
 #include <Eigen/Core>
 
@@ -18,18 +17,18 @@
 #include <unordered_map>
 #include <vector>
 
-// minizip / zlib for .npz (which is just a .zip)
+// .npz 本质上是 zip 文件，这里用 zlib 解压。
 #include <zlib.h>
 
 namespace jave {
 namespace npz {
 
-// Single array loaded from .npy
+// 从 .npy 中读出的单个数组。
 
 struct NpyArray {
   std::vector<char> data;
   std::vector<size_t> shape;
-  size_t word_size = 0; // 4 = float32, 8 = float64
+  size_t word_size = 0; // 4 表示 float32，8 表示 float64。
   bool is_float = true;
 
   size_t num_elements() const {
@@ -39,7 +38,7 @@ struct NpyArray {
     return n;
   }
 
-  /// Get element as double (handles f4/f8 transparently).
+  /// 以 double 形式读取元素，透明处理 f4/f8。
   double as_double(size_t i) const {
     if (word_size == 8)
       return reinterpret_cast<const double *>(data.data())[i];
@@ -48,7 +47,7 @@ struct NpyArray {
           reinterpret_cast<const float *>(data.data())[i]);
   }
 
-  /// Load into Eigen VectorXd.
+  /// 加载为 Eigen VectorXd。
   Eigen::VectorXd to_vector() const {
     const size_t n = num_elements();
     Eigen::VectorXd v(n);
@@ -57,7 +56,7 @@ struct NpyArray {
     return v;
   }
 
-  /// Load into Eigen MatrixXd (row-major numpy --> col-major Eigen).
+  /// 加载为 Eigen MatrixXd，将 numpy 行主序转换为 Eigen 列主序。
   Eigen::MatrixXd to_matrix() const {
     if (shape.size() != 2)
       throw std::runtime_error("to_matrix: array is not 2-D");
@@ -70,30 +69,30 @@ struct NpyArray {
     return m;
   }
 
-  /// Load scalar (0-D or single-element array).
+  /// 加载标量，支持 0 维或单元素数组。
   double to_scalar() const { return as_double(0); }
 };
 
-// Parse a .npy blob (v1.0 or v2.0)
+// 解析 .npy 二进制块，支持 v1.0 或 v2.0。
 
 inline NpyArray parse_npy(const char *buf, size_t len) {
-  // Magic: \x93NUMPY
+  // 魔数：\x93NUMPY。
   if (len < 10 || buf[0] != '\x93' || std::memcmp(buf + 1, "NUMPY", 5) != 0)
     throw std::runtime_error("parse_npy: not a valid .npy buffer");
 
   uint8_t major = static_cast<uint8_t>(buf[6]);
-  // uint8_t minor = static_cast<uint8_t>(buf[7]);
+  // 小版本号当前不参与分支判断。
 
   uint32_t header_len = 0;
   size_t header_offset = 0;
 
   if (major == 1) {
-    // v1.0: 2-byte little-endian header length at offset 8
+    // v1.0：偏移 8 处为 2 字节小端头部长度。
     header_len = static_cast<uint16_t>(static_cast<uint8_t>(buf[8]) |
                                        (static_cast<uint8_t>(buf[9]) << 8));
     header_offset = 10;
   } else if (major >= 2) {
-    // v2.0+: 4-byte little-endian header length at offset 8
+    // v2.0+：偏移 8 处为 4 字节小端头部长度。
     header_len = static_cast<uint32_t>(static_cast<uint8_t>(buf[8]) |
                                        (static_cast<uint8_t>(buf[9]) << 8) |
                                        (static_cast<uint8_t>(buf[10]) << 16) |
@@ -110,11 +109,11 @@ inline NpyArray parse_npy(const char *buf, size_t len) {
   const char *data_start = buf + header_offset + header_len;
   size_t data_len = len - header_offset - header_len;
 
-  // Parse header dict:  {'descr': '<f8', 'fortran_order': False, 'shape':
-  // (49,), }
+  // 解析头部字典，例如 {'descr': '<f8', 'fortran_order': False, 'shape':
+  // (49,), }。
   NpyArray arr;
 
-  // dtype
+  // 数据类型。
   std::regex descr_re("'descr'\\s*:\\s*'([^']*)'");
   std::smatch m;
   if (!std::regex_search(header, m, descr_re))
@@ -126,24 +125,24 @@ inline NpyArray parse_npy(const char *buf, size_t len) {
   else if (descr == "<f4" || descr == "=f4" || descr == "f4")
     arr.word_size = 4;
   else if (descr == "<i8" || descr == "<i4" || descr == "<u8" || descr == "<u4")
-    // integer scalars (n_hidden, etc.)
+    // 整数标量，例如 n_hidden。
     arr.word_size = (descr.back() == '8') ? 8 : 4;
   else
     throw std::runtime_error("parse_npy: unsupported dtype: " + descr);
 
   arr.is_float = (descr.find('f') != std::string::npos);
 
-  // shape
+  // 数组形状。
   std::regex shape_re("'shape'\\s*:\\s*\\(([^)]*)\\)");
   if (!std::regex_search(header, m, shape_re))
     throw std::runtime_error("parse_npy: no shape in header");
   std::string shape_str = m[1].str();
-  // Parse comma-separated ints (may be empty for 0-d, or "49," for 1-d)
+  // 解析逗号分隔的整数；0 维可为空，1 维常见形式为 "49,"。
   {
     std::istringstream ss(shape_str);
     std::string tok;
     while (std::getline(ss, tok, ',')) {
-      // Trim whitespace
+      // 去掉首尾空白。
       tok.erase(0, tok.find_first_not_of(" \t\n"));
       tok.erase(tok.find_last_not_of(" \t\n") + 1);
       if (!tok.empty())
@@ -151,14 +150,14 @@ inline NpyArray parse_npy(const char *buf, size_t len) {
     }
   }
 
-  // Copy data
+  // 复制数组数据。
   size_t expected = arr.num_elements() * arr.word_size;
   if (data_len < expected)
     throw std::runtime_error("parse_npy: data truncated (expected " +
                              std::to_string(expected) + " bytes, got " +
                              std::to_string(data_len) + ")");
 
-  // For integer types stored as scalars, convert to double in a float64 buffer
+  // 对整数标量，转换成 double 并存入 float64 缓冲区。
   if (!arr.is_float) {
     arr.data.resize(arr.num_elements() * 8);
     for (size_t i = 0; i < arr.num_elements(); ++i) {
@@ -183,10 +182,9 @@ inline NpyArray parse_npy(const char *buf, size_t len) {
   return arr;
 }
 
-// Load .npz (zip of .npy files)
+// 加载 .npz，即多个 .npy 文件组成的 zip。
 
-/// Reads .npz via the ZIP central directory (handles data descriptors
-/// from np.savez_compressed where local header sizes are 0).
+/// 通过 ZIP 中央目录读取 .npz，可处理 np.savez_compressed 生成的本地头部长度为 0 的情况。
 
 using NpzFile = std::unordered_map<std::string, NpyArray>;
 
@@ -212,11 +210,11 @@ inline NpzFile load_npz(const std::string &path) {
     return v;
   };
 
-  // Find End-of-Central-Directory record (last 22+ bytes)
-  // Signature: PK\x05\x06
+  // 查找中央目录结束记录，位置在文件最后 22 字节或更靠前。
+  // 签名：PK\x05\x06。
   size_t eocd_pos = file_size;
   {
-    // Reverse search because the ZIP comment field can be 0..65535 bytes.
+    // ZIP 注释字段长度可能为 0..65535 字节，因此需要反向搜索。
     size_t search_start = (file_size > 65557) ? file_size - 65557 : 0;
     for (size_t i = file_size - 22; i >= search_start; --i) {
       if (fd[i] == 'P' && fd[i + 1] == 'K' && fd[i + 2] == 0x05 &&
@@ -234,12 +232,12 @@ inline NpzFile load_npz(const std::string &path) {
   uint32_t cd_size = r32(eocd_pos + 12);
   uint32_t cd_offset = r32(eocd_pos + 16);
 
-  // Walk central directory entries
+  // 遍历中央目录条目。
   NpzFile npz;
   size_t cp = cd_offset;
 
   while (cp + 46 <= cd_offset + cd_size) {
-    // Central directory file header: PK\x01\x02
+    // 中央目录文件头：PK\x01\x02。
     if (fd[cp] != 'P' || fd[cp + 1] != 'K' || fd[cp + 2] != 0x01 ||
         fd[cp + 3] != 0x02)
       break;
@@ -254,10 +252,10 @@ inline NpzFile load_npz(const std::string &path) {
 
     std::string name(fd.data() + cp + 46, name_len);
 
-    // Advance to next central directory entry
+    // 移动到下一个中央目录条目。
     cp += 46 + name_len + extra_len + comment_len;
 
-    // Read data from local file header
+    // 从本地文件头定位实际数据。
     if (local_off + 30 > file_size)
       continue;
     uint16_t loc_name_len = r16(local_off + 26);
@@ -267,7 +265,7 @@ inline NpzFile load_npz(const std::string &path) {
     if (data_pos + comp_size > file_size)
       throw std::runtime_error("load_npz: truncated entry: " + name);
 
-    // Strip .npy extension for key
+    // 去掉 .npy 后缀作为键名。
     std::string key = name;
     if (key.size() > 4 && key.substr(key.size() - 4) == ".npy")
       key = key.substr(0, key.size() - 4);
@@ -275,10 +273,10 @@ inline NpzFile load_npz(const std::string &path) {
     std::vector<char> npy_buf;
 
     if (method == 0) {
-      // Stored
+      // 未压缩存储。
       npy_buf.assign(fd.data() + data_pos, fd.data() + data_pos + comp_size);
     } else if (method == 8) {
-      // Deflate
+      // 压缩数据。
       npy_buf.resize(uncomp_size);
       z_stream zs{};
       if (inflateInit2(&zs, -MAX_WBITS) != Z_OK)
@@ -302,11 +300,11 @@ inline NpzFile load_npz(const std::string &path) {
   return npz;
 }
 
-// Convenience helpers.
+// 便捷辅助函数。
 
 inline bool has_key(const NpzFile &npz, const std::string &key) {
   return npz.find(key) != npz.end();
 }
 
-} // namespace npz
-} // namespace jave
+} // 命名空间 npz
+} // 命名空间 jave

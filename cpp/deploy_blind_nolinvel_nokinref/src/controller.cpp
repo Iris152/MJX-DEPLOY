@@ -1,5 +1,5 @@
-/// @file controller.cpp
-/// Go2Deploy - full deployment controller with unitree_sdk2.
+/// 文件：controller.cpp
+/// Go2Deploy，基于 unitree_sdk2 的完整部署控制器。
 
 #include "controller.hpp"
 #include "math_utils.hpp"
@@ -22,7 +22,7 @@
 #include <rclcpp/rclcpp.hpp>
 #endif
 
-//  unitree_sdk2
+// unitree_sdk2 相关头文件。
 #include <unitree/common/thread/thread.hpp>
 #include <unitree/common/time/time_tool.hpp>
 #include <unitree/idl/go2/LowCmd_.hpp>
@@ -38,7 +38,7 @@ using namespace unitree::robot::b2;
 
 namespace jave {
 
-//  CRC32 (from unitree_sdk2 examples)
+// CRC32 校验逻辑，来自 unitree_sdk2 示例。
 
 static uint32_t crc32_core(uint32_t *ptr, uint32_t len) {
   uint32_t xbit = 0;
@@ -64,7 +64,7 @@ static uint32_t crc32_core(uint32_t *ptr, uint32_t len) {
   return CRC32;
 }
 
-//  State name
+// 状态名称转换。
 
 const char *state_name(State s) {
   switch (s) {
@@ -84,7 +84,7 @@ const char *state_name(State s) {
   return "UNKNOWN";
 }
 
-//  SDK handle storage
+// SDK 句柄存储。
 
 struct Go2Deploy::SdkHandles {
   unitree_go::msg::dds_::LowCmd_ low_cmd{};
@@ -102,7 +102,7 @@ struct Go2Deploy::SdkHandles {
 #endif
 };
 
-//  Construction / destruction
+// 构造与析构。
 
 Go2Deploy::~Go2Deploy() {
 #ifdef OPEN_DIFFLOCO_ENABLE_ROS2
@@ -173,7 +173,7 @@ Go2Deploy::Go2Deploy(std::shared_ptr<NumpyPolicy> policy,
   std::cout << "  Command source: " << source_name << "\n";
 }
 
-//  SDK initialisation (matches go2_low_level.cpp)
+// SDK 初始化，流程与 go2_low_level.cpp 保持一致。
 
 void Go2Deploy::init_sdk(const std::string &interface, int domain_id) {
   std::cout << "  DDS init: interface=" << interface << ", domain_id="
@@ -181,7 +181,7 @@ void Go2Deploy::init_sdk(const std::string &interface, int domain_id) {
 
   ChannelFactory::Instance()->Init(domain_id, interface);
 
-  // InitLowCmd
+  // 初始化 LowCmd。
   auto &cmd = sdk_->low_cmd;
   cmd.head()[0] = 0xFE;
   cmd.head()[1] = 0xEF;
@@ -196,12 +196,12 @@ void Go2Deploy::init_sdk(const std::string &interface, int domain_id) {
     cmd.motor_cmd()[i].tau() = 0.0f;
   }
 
-  // Publisher
+  // 创建低层命令发布器。
   sdk_->pub.reset(
       new ChannelPublisher<unitree_go::msg::dds_::LowCmd_>("rt/lowcmd"));
   sdk_->pub->InitChannel();
 
-  // Subscriber
+  // 创建低层状态订阅器。
   sdk_->sub.reset(
       new ChannelSubscriber<unitree_go::msg::dds_::LowState_>("rt/lowstate"));
   sdk_->sub->InitChannel(
@@ -209,7 +209,7 @@ void Go2Deploy::init_sdk(const std::string &interface, int domain_id) {
 
   release_sport_mode();
 
-  // 500 Hz command thread (interval in microseconds)
+  // 500 赫兹命令线程，间隔单位为微秒。
   sdk_->cmd_thread = CreateRecurrentThreadEx(
       "writebasiccmd", UT_CPU_ID_NONE, 2000, &Go2Deploy::LowCmdWrite, this);
 
@@ -260,7 +260,7 @@ void Go2Deploy::release_sport_mode() {
   std::cout << "  motion-control service is deactivated\n";
 }
 
-//  Low-state callback (runs on SDK subscriber thread)
+// 低层状态回调，运行在 SDK 订阅线程中。
 
 void Go2Deploy::LowStateHandler(const void *message) {
   const auto &msg =
@@ -311,7 +311,7 @@ void Go2Deploy::update_wireless_command(const uint8_t *data, std::size_t size) {
   set_cmd(vx, vy, wz);
 }
 
-//  Motor helper
+// 电机指令辅助函数。
 
 void Go2Deploy::set_motor(int i, float q, float kp_val, float dq, float kd_val,
                           float tau) {
@@ -329,7 +329,7 @@ void Go2Deploy::publish_cmd() {
   sdk_->pub->Write(sdk_->low_cmd);
 }
 
-//  500 Hz command loop
+// 500 赫兹命令循环。
 
 void Go2Deploy::LowCmdWrite() {
   {
@@ -366,7 +366,7 @@ void Go2Deploy::LowCmdWrite() {
   publish_cmd();
 }
 
-//  State handlers
+// 状态处理函数。
 
 void Go2Deploy::handle_idle() {
   for (int i = 0; i < NUM_MOTORS; ++i)
@@ -474,7 +474,7 @@ void Go2Deploy::handle_estop() {
               0.0f);
 }
 
-//  Observation builder
+// 观测构造。
 
 Eigen::VectorXd Go2Deploy::build_obs() {
   Eigen::Matrix<double, 12, 1> sim_pos, sim_vel;
@@ -495,8 +495,8 @@ Eigen::VectorXd Go2Deploy::build_obs() {
   Eigen::VectorXd joint_pos_err =
       sim_pos.cast<double>() - policy_->default_joints;
 
-  // Actor frame: angvel(3), gravity(3), cmd(3), qpos_err(12),
-  // qvel(12), last_action(12).
+  // 单帧策略网络观测：角速度(3)、重力方向(3)、速度指令(3)、关节位置误差(12)、
+  // 关节速度(12)、上一时刻动作(12)。
   const int obs_dim = policy_->actor_frame_obs_dim;
   Eigen::VectorXd frame = Eigen::VectorXd::Zero(obs_dim);
 
@@ -544,7 +544,7 @@ Eigen::VectorXd Go2Deploy::build_obs() {
   return actor_obs_history_;
 }
 
-//  Safety
+// 安全检查。
 
 bool Go2Deploy::check_safety() {
   Eigen::Vector4d quat;
@@ -565,7 +565,7 @@ bool Go2Deploy::check_safety() {
   return true;
 }
 
-//  State transitions
+// 状态切换。
 
 void Go2Deploy::transition(State to) {
   std::cout << "  State: " << state_name(state_.load()) << " -> "
@@ -612,7 +612,7 @@ void Go2Deploy::transition(State to) {
   state_.store(to);
 }
 
-//  Keyboard input
+// 键盘输入。
 
 void Go2Deploy::set_cmd(double vx, double vy, double yaw_rate) {
   std::lock_guard<std::mutex> lock(cmd_mutex_);
@@ -667,13 +667,13 @@ void Go2Deploy::process_key(const std::string &key) {
   }
 }
 
-//  Signal handling
+// 信号处理。
 
 static volatile std::sig_atomic_t g_shutdown_requested = 0;
 
 static void sigint_handler(int /*sig*/) { g_shutdown_requested = 1; }
 
-//  Main run loop
+// 主运行循环。
 
 void Go2Deploy::run() {
   std::cout << "\n"
@@ -689,7 +689,7 @@ void Go2Deploy::run() {
             << "\n"
             << "\n  Waiting for robot state...\n";
 
-  // Install SIGINT handler so Ctrl+C triggers graceful sit-down
+  // 注册 SIGINT 处理器，让 Ctrl+C 触发平滑坐下。
   std::signal(SIGINT, sigint_handler);
 
   {
@@ -716,9 +716,9 @@ void Go2Deploy::run() {
       << "  State: IDLE (zero torque, joints free)\n"
       << "  Controls: Enter=advance  x=estop  w/s a/d q/e=vel  0=zero\n\n";
 
-  // Command thread already started by CreateRecurrentThreadEx
+  // 命令线程已经由 CreateRecurrentThreadEx 启动。
 
-  // Keyboard input - breaks on EOF, failed read, or SIGINT
+  // 键盘输入循环，遇到 EOF、读取失败或 SIGINT 时退出。
   std::string line;
   while (!g_shutdown_requested && std::getline(std::cin, line)) {
     while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
@@ -728,11 +728,11 @@ void Go2Deploy::run() {
     process_key(line);
   }
 
-  //  Graceful shutdown
+  // 平滑关机流程。
   std::cout << "\n  Shutting down gracefully...\n";
   transition(State::SITDOWN);
 
-  // Wait for sit-down to complete (transitions to IDLE automatically)
+  // 等待坐下流程完成，完成后会自动切回 IDLE。
   auto t0 = std::chrono::steady_clock::now();
   while (!sitdown_done_.load() &&
          std::chrono::steady_clock::now() - t0 < std::chrono::seconds(5)) {
@@ -746,9 +746,9 @@ void Go2Deploy::run() {
     state_.store(State::IDLE);
   }
 
-  // Let IDLE send a few zero-torque commands before exiting
+  // 退出前让 IDLE 状态发送几帧零力矩命令。
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
   std::cout << "  Done.\n";
 }
 
-} // namespace jave
+} // 命名空间 jave
