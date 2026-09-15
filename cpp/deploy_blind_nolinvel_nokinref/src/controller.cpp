@@ -5,6 +5,7 @@
 #include "math_utils.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -16,6 +17,8 @@
 #include <thread>
 
 #include <csignal>
+#include <sys/select.h>
+#include <unistd.h>
 
 #ifdef OPEN_DIFFLOCO_ENABLE_ROS2
 #include <geometry_msgs/msg/point_stamped.hpp>
@@ -673,9 +676,39 @@ static volatile std::sig_atomic_t g_shutdown_requested = 0;
 
 static void sigint_handler(int /*sig*/) { g_shutdown_requested = 1; }
 
+enum class InputPollResult { Line, Timeout, Closed };
+
+static InputPollResult poll_terminal_line(std::string &line) {
+  fd_set readfds;
+  FD_ZERO(&readfds);
+  FD_SET(STDIN_FILENO, &readfds);
+
+  timeval timeout{};
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 100000;
+
+  int ret = select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &timeout);
+  if (ret == 0)
+    return InputPollResult::Timeout;
+  if (ret < 0) {
+    if (errno == EINTR)
+      return InputPollResult::Timeout;
+    return InputPollResult::Closed;
+  }
+
+  if (!FD_ISSET(STDIN_FILENO, &readfds))
+    return InputPollResult::Timeout;
+
+  if (std::getline(std::cin, line))
+    return InputPollResult::Line;
+  return InputPollResult::Closed;
+}
+
 // 主运行循环。
 
 void Go2Deploy::run() {
+  g_shutdown_requested = 0;
+
   std::cout << "\n"
             << std::string(60, '=') << "\n"
             << "  AHAC/SHAC/JAVE Go2 Deployment Controller (C++)\n"
@@ -691,6 +724,7 @@ void Go2Deploy::run() {
 
   // 注册 SIGINT 处理器，让 Ctrl+C 触发平滑坐下。
   std::signal(SIGINT, sigint_handler);
+  std::signal(SIGTERM, sigint_handler);
 
   {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -718,9 +752,15 @@ void Go2Deploy::run() {
 
   // 命令线程已经由 CreateRecurrentThreadEx 启动。
 
-  // 键盘输入循环，遇到 EOF、读取失败或 SIGINT 时退出。
+  // 键盘输入循环，轮询 stdin，避免 Ctrl+C 后仍卡在 getline 等回车。
   std::string line;
-  while (!g_shutdown_requested && std::getline(std::cin, line)) {
+  while (!g_shutdown_requested) {
+    const InputPollResult input = poll_terminal_line(line);
+    if (input == InputPollResult::Timeout)
+      continue;
+    if (input == InputPollResult::Closed)
+      break;
+
     while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
       line.pop_back();
     for (auto &c : line)
