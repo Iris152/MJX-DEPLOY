@@ -9,7 +9,8 @@ separate laptop.
 - `policies/ahac_go2_blind_nolinvel_nokinref/policy_best_tracking_deploy.npz`:
   exported AHAC policy from `ahac_20260828_180341`.
 - `cpp/deploy_blind_nolinvel_nokinref`: C++ low-level DDS controller and MLP
-  policy runtime.
+  policy runtime. The controller implementation is
+  `cpp/deploy_blind_nolinvel_nokinref/src/controller.cpp`.
 - `python/mjx_deploy/ahac_go2_deploy.py`: build/run wrapper for the packaged
   AHAC policy.
 - `python/mjx_deploy/terminal_command.py`: optional ROS2 keyboard publisher for
@@ -137,6 +138,10 @@ WALKING`, use `w/s/a/d/q/e/0` to test commands, use `x` for `ESTOP`, and use
 `Ctrl-C` to test sit-down. See `docs/AHAC_MUJOCO_SDK2_SIM_TEST.md` for the full
 checklist and viewer controls.
 
+The simulator starts from `prone` by default. After `Ctrl-C`, the deployment
+controller sends the sit-down trajectory and the simulator holds the final
+crouch target instead of returning to the standing home pose.
+
 ## 4. Identify the Robot Network Interface
 
 Run:
@@ -172,6 +177,14 @@ python -m mjx_deploy.ahac_go2_deploy run \
 
 Replace `eth0` with the real interface from `ip -br link`.
 
+If the Python helper package has not been installed with `pip install -e .`, run
+from the repository root with `PYTHONPATH=python`:
+
+```bash
+PYTHONPATH=python python -m mjx_deploy.ahac_go2_deploy run \
+  --interface eth0 --domain-id 0 --command-source terminal --dry-run
+```
+
 ## 7. Run AHAC on the Go2
 
 Start with the robot supported or with plenty of clear space, keep the physical
@@ -181,6 +194,12 @@ running.
 ```bash
 python -m mjx_deploy.ahac_go2_deploy run \
   --interface eth0 --command-source terminal --build-if-missing
+```
+
+Equivalent helper script from the repository root:
+
+```bash
+./scripts/run_ahac_terminal.sh eth0 0
 ```
 
 Terminal operation is line based:

@@ -20,7 +20,6 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -76,8 +75,8 @@ struct Args {
   double status_period = 1.0;
   bool headless = false;
   ControlMode control_mode = ControlMode::Auto;
-  InitialPose initial_pose = InitialPose::Home;
-  IdleTarget idle_target = IdleTarget::Home;
+  InitialPose initial_pose = InitialPose::Prone;
+  IdleTarget idle_target = IdleTarget::Initial;
 };
 
 struct CommandSnapshot {
@@ -88,6 +87,15 @@ struct CommandSnapshot {
   std::array<double, kMotorCount> kd{};
   std::array<double, kMotorCount> tau{};
   double received_at = 0.0;
+};
+
+struct ControlSnapshot {
+  CommandSnapshot cmd;
+  std::array<double, kMotorCount> hold_q{};
+  std::array<double, kMotorCount> hold_dq{};
+  std::array<double, kMotorCount> hold_kp{};
+  std::array<double, kMotorCount> hold_kd{};
+  bool hold_from_command = false;
 };
 
 struct Vec3 {
@@ -114,8 +122,8 @@ void print_usage(const char *prog) {
       << "  --cmd-timeout <sec>        LowCmd 超时时间，默认 0.25\n"
       << "  --idle-kp <value>          无有效命令时保持姿态的 kp\n"
       << "  --idle-kd <value>          无有效命令时保持姿态的 kd\n"
-      << "  --initial-pose <pose>      home、crouch 或 prone\n"
-      << "  --idle-target <target>     initial 或 home\n"
+      << "  --initial-pose <pose>      home、crouch 或 prone，默认 prone\n"
+      << "  --idle-target <target>     initial 或 home，默认 initial\n"
       << "  --control-mode <mode>      auto、position_servo 或 pd_torque\n"
       << "  --headless                 不打开 MuJoCo 界面\n"
       << "  --max-time <sec>           最长运行时间，0 表示一直运行\n"
@@ -425,6 +433,17 @@ private:
       data_->qpos[2] = 0.13;
     mju_zero(data_->qvel, model_->nv);
     mj_forward(model_, data_);
+    reset_hold_to_idle();
+  }
+
+  void reset_hold_to_idle() {
+    std::lock_guard<std::mutex> lock(cmd_mutex_);
+    latest_cmd_ = CommandSnapshot{};
+    hold_q_ = idle_q_;
+    hold_dq_.fill(0.0);
+    hold_kp_.fill(args_.idle_kp);
+    hold_kd_.fill(args_.idle_kd);
+    hold_from_command_ = false;
   }
 
   void init_lowstate_template() {
@@ -494,6 +513,13 @@ private:
     {
       std::lock_guard<std::mutex> lock(cmd_mutex_);
       latest_cmd_ = snapshot;
+      if (snapshot.active) {
+        hold_q_ = snapshot.q;
+        hold_dq_ = snapshot.dq;
+        hold_kp_ = snapshot.kp;
+        hold_kd_ = snapshot.kd;
+        hold_from_command_ = true;
+      }
     }
 
     if (!lowcmd_seen_) {
@@ -505,6 +531,11 @@ private:
   CommandSnapshot get_command() const {
     std::lock_guard<std::mutex> lock(cmd_mutex_);
     return latest_cmd_;
+  }
+
+  ControlSnapshot get_control_snapshot() const {
+    std::lock_guard<std::mutex> lock(cmd_mutex_);
+    return {latest_cmd_, hold_q_, hold_dq_, hold_kp_, hold_kd_, hold_from_command_};
   }
 
   void read_joint_state(std::array<double, kMotorCount> &q,
@@ -538,7 +569,8 @@ private:
     std::array<double, kMotorCount> dq{};
     read_joint_state(q, dq);
 
-    const auto cmd = get_command();
+    const auto control = get_control_snapshot();
+    const auto &cmd = control.cmd;
     const bool fresh = (now_seconds() - cmd.received_at) <= args_.cmd_timeout;
     std::array<double, kMotorCount> ctrl{};
 
@@ -547,8 +579,8 @@ private:
         set_position_servo_pd(cmd.kp, cmd.kd);
         ctrl = cmd.q;
       } else {
-        set_position_servo_pd(args_.idle_kp, args_.idle_kd);
-        ctrl = idle_q_;
+        set_position_servo_pd(control.hold_kp, control.hold_kd);
+        ctrl = control.hold_q;
       }
     } else {
       if (cmd.active && fresh) {
@@ -556,7 +588,8 @@ private:
           ctrl[i] = cmd.tau[i] + cmd.kp[i] * (cmd.q[i] - q[i]) + cmd.kd[i] * (cmd.dq[i] - dq[i]);
       } else {
         for (int i = 0; i < kMotorCount; ++i)
-          ctrl[i] = args_.idle_kp * (idle_q_[i] - q[i]) - args_.idle_kd * dq[i];
+          ctrl[i] = control.hold_kp[i] * (control.hold_q[i] - q[i]) +
+                    control.hold_kd[i] * (control.hold_dq[i] - dq[i]);
       }
     }
 
@@ -702,16 +735,6 @@ private:
     mjrRect viewport{0, 0, width, height};
     mjv_updateScene(model_, data_, &option_, nullptr, &camera_, mjCAT_ALL, &scene_);
     mjr_render(viewport, &scene_, &context_);
-
-    const auto cmd = get_command();
-    std::ostringstream overlay;
-    overlay << "AHAC 部署仿真\n"
-            << "DDS: " << args_.interface << " / domain " << args_.domain_id << "\n"
-            << "LowCmd: " << (cmd.active ? "有效" : "无效") << "\n"
-            << "t=" << data_->time << "  z=" << data_->qpos[2] << "\n"
-            << "Esc 退出，r 重置";
-    const std::string text = overlay.str();
-    mjr_overlay(mjFONT_NORMAL, mjGRID_TOPLEFT, viewport, text.c_str(), nullptr, &context_);
     glfwSwapBuffers(window_);
   }
 
@@ -793,6 +816,10 @@ private:
   std::array<double, kMotorCount> home_q_{};
   std::array<double, kMotorCount> initial_q_{};
   std::array<double, kMotorCount> idle_q_{};
+  std::array<double, kMotorCount> hold_q_{};
+  std::array<double, kMotorCount> hold_dq_{};
+  std::array<double, kMotorCount> hold_kp_{};
+  std::array<double, kMotorCount> hold_kd_{};
   ControlMode control_mode_ = ControlMode::PositionServo;
 
   ChannelPublisherPtr<LowState> lowstate_pub_;
@@ -800,6 +827,7 @@ private:
   LowState lowstate_{};
   mutable std::mutex cmd_mutex_;
   CommandSnapshot latest_cmd_{};
+  bool hold_from_command_ = false;
   bool lowcmd_seen_ = false;
   long long step_count_ = 0;
 

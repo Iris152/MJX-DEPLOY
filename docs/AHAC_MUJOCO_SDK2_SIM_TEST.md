@@ -4,12 +4,12 @@
 
 ## 1. 测试覆盖范围
 
-- `IDLE`：部署控制器发布零力矩，仿真器用空闲 PD 保持初始姿态。
+- `IDLE`：部署控制器发布零力矩；仿真器启动时保持初始趴地姿态，收到过有效 LowCmd 后保持最后一个有效目标关节。
 - `STANDUP`：部署控制器从当前关节插值到策略默认站立姿态。
 - `READY`：站立完成后保持默认姿态，等待进入行走。
 - `WALKING`：AHAC 策略 50 Hz 推理，500 Hz 发送目标关节，仿真器实时执行。
 - `ESTOP`：终端输入 `x` 后部署控制器保持当前关节。
-- `SITDOWN`：`Ctrl-C` 或输入结束后触发平滑坐下并退出。
+- `SITDOWN`：`Ctrl-C` 或输入结束后触发平滑坐下；仿真器保持最后的 crouch 目标，不再回到站立姿态。
 
 ## 2. 安装依赖
 
@@ -86,6 +86,8 @@ python -m mjx_deploy.ahac_go2_deploy sim \
   --build-if-missing
 ```
 
+默认 `--initial-pose prone --idle-target initial`，所以仿真窗口启动时 Go2 会完全趴在地上；按部署端第一次空 Enter 后才进入起立流程。
+
 等价脚本：
 
 ```bash
@@ -152,7 +154,7 @@ Ctrl-C
 - `r`：把仿真中的 Go2 重置到初始姿态。
 - `Esc`：关闭仿真窗口。
 
-窗口左上角会显示 DDS 网卡、DDS 域、是否收到有效 LowCmd、仿真时间和机身高度。终端里也会周期性打印 `base_z` 和机身平面速度。
+MuJoCo 窗口内不叠加文字，避免中文字体乱码；终端里会周期性打印 `base_z` 和机身平面速度。
 
 ## 6. 无界面冒烟测试
 
@@ -172,8 +174,8 @@ python -m mjx_deploy.ahac_go2_deploy sim \
 ## 7. 常用参数
 
 - `--scene models/go2/scene_mjx.xml`：默认使用 AHAC 训练同源 Go2 MuJoCo 模型。
-- `--initial-pose home|crouch|prone`：仿真初始姿态，默认 `home`。
-- `--idle-target initial|home`：无有效 LowCmd 时保持初始姿态或 home 姿态，默认 `home`。
+- `--initial-pose home|crouch|prone`：仿真初始姿态，默认 `prone`。
+- `--idle-target initial|home`：仿真启动且尚未收到有效 LowCmd 时保持初始姿态或 home 姿态，默认 `initial`。收到过有效 LowCmd 后，命令失效或超时时会保持最后一个有效目标关节。
 - `--control-mode auto|position_servo|pd_torque`：默认自动识别 MuJoCo 执行器语义。
 - `--sim-dt 0.002`：仿真低层步长，匹配 500 Hz LowCmd 频率。
 - `--viewer-dt 0.02`：界面刷新间隔，匹配 50 Hz 策略节奏。
@@ -184,6 +186,6 @@ python -m mjx_deploy.ahac_go2_deploy sim \
 - `READY` 期间机身应基本稳定，腿部不应明显歪斜。
 - `WALKING` 零速度时应近似原地踏步或稳定站立。
 - 前后、侧向和偏航指令应能在 MuJoCo 界面里看到明确响应。
-- `x` 后应保持当前关节，`Ctrl-C` 后应进入坐下并退出。
+- `x` 后应保持当前关节，`Ctrl-C` 后应进入坐下并停在 crouch 姿态后退出。
 
 如果仿真端一直显示没有有效 LowCmd，检查两个终端是否都使用 `--interface lo --domain-id 1`。如果部署端提示 10 秒内没有 state，检查仿真端是否已经启动、是否订阅/发布同一 DDS 域。若 CMake 找不到 MuJoCo，显式设置 `MUJOCO_ROOT`；若找不到 `unitree_sdk2`，设置 `CMAKE_PREFIX_PATH=/usr/local` 或 SDK2 的安装前缀。

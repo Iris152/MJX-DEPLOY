@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -67,6 +68,23 @@ def _default_mujoco_root() -> Path | None:
     ):
         return root
     return None
+
+
+def _run_child(cmd: list[str], *, cwd: Path = REPO_ROOT) -> int:
+    """运行 C++ 子进程；收到 Ctrl-C 时转发中断并等待控制器安全收尾。"""
+    proc = subprocess.Popen(cmd, cwd=cwd)
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        try:
+            proc.send_signal(signal.SIGINT)
+        except ProcessLookupError:
+            return proc.returncode or 130
+        try:
+            return proc.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            print("Interrupted; child process did not exit within 20s", file=sys.stderr)
+            return 130
 
 
 def build_cmd(args: argparse.Namespace) -> int:
@@ -199,7 +217,8 @@ def run_cmd(args: argparse.Namespace) -> int:
     print("Controls: Enter=stand, Enter=walk, w/s=vx, a/d=vy, q/e=yaw, 0=zero, x=estop, Ctrl-C=sit down")
     if args.dry_run:
         return 0
-    return subprocess.run(cmd, cwd=REPO_ROOT).returncode
+    sys.stdout.flush()
+    return _run_child(cmd)
 
 
 def sim_cmd(args: argparse.Namespace) -> int:
@@ -265,7 +284,8 @@ def sim_cmd(args: argparse.Namespace) -> int:
     print("Simulator publishes rt/lowstate and subscribes rt/lowcmd. Use lo/domain 1 for local tests.")
     if args.dry_run:
         return 0
-    return subprocess.run(cmd, cwd=REPO_ROOT).returncode
+    sys.stdout.flush()
+    return _run_child(cmd)
 
 
 def stand_cmd(args: argparse.Namespace) -> int:
@@ -293,7 +313,8 @@ def stand_cmd(args: argparse.Namespace) -> int:
     print("  " + " ".join(cmd))
     if args.dry_run:
         return 0
-    return subprocess.run(cmd, cwd=REPO_ROOT).returncode
+    sys.stdout.flush()
+    return _run_child(cmd)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -344,8 +365,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p_sim.add_argument("--viewer-dt", type=float, default=0.02, help="Viewer refresh interval")
     p_sim.add_argument("--cmd-timeout", type=float, default=0.25, help="LowCmd stale timeout")
     p_sim.add_argument("--status-period", type=float, default=1.0, help="Console status print interval")
-    p_sim.add_argument("--initial-pose", choices=["home", "crouch", "prone"], default="home")
-    p_sim.add_argument("--idle-target", choices=["initial", "home"], default="home")
+    p_sim.add_argument(
+        "--initial-pose",
+        choices=["home", "crouch", "prone"],
+        default="prone",
+        help="Initial robot pose; default is prone",
+    )
+    p_sim.add_argument(
+        "--idle-target",
+        choices=["initial", "home"],
+        default="initial",
+        help="Pose held before the first valid LowCmd; default is initial",
+    )
     p_sim.add_argument("--control-mode", choices=["auto", "position_servo", "pd_torque"], default="auto")
     p_sim.add_argument("--headless", action="store_true", help="Run without MuJoCo viewer")
     p_sim.add_argument("--max-time", type=float, default=0.0, help="Maximum simulator runtime in seconds")

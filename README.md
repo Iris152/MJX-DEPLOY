@@ -7,6 +7,7 @@ The repository includes:
 
 - AHAC deployment policy: `policies/ahac_go2_blind_nolinvel_nokinref/policy_best_tracking_deploy.npz`
 - C++ Unitree low-level controller: `cpp/deploy_blind_nolinvel_nokinref`
+  - Main controller source: `cpp/deploy_blind_nolinvel_nokinref/src/controller.cpp`
 - Python build/run helpers: `python/mjx_deploy`
 - Official Unitree Go2 stand example: `examples/unitree_sdk2/go2_stand_example.cpp`
 - Full laptop-to-real-Go2 instructions: `docs/AHAC_GO2_DEPLOYMENT.md`
@@ -49,7 +50,8 @@ python -m mjx_deploy.ahac_go2_deploy run --interface lo --domain-id 1 --command-
 
 The simulator opens a MuJoCo viewer and uses C++ `unitree_sdk2` topics, so the
 existing AHAC deployment state machine is exercised through `rt/lowstate` and
-`rt/lowcmd`.
+`rt/lowcmd`. It starts from a prone pose by default and holds the final crouch
+target after `Ctrl-C` sit-down.
 
 Keep the robot supported for first tests and keep the physical emergency stop
 ready.
