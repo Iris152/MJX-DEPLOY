@@ -10,6 +10,7 @@
 #include <Eigen/Core>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -99,16 +100,21 @@ public:
   /// 主阻塞循环，键盘输入在调用线程中处理。
   void run();
 
-  // PD 增益，可在 run() 前覆盖；默认从策略文件自动加载。
-  double kp = 35.0;
-  double kd = 0.5;
-
   // 起立/坐下使用平滑增益；宇树示例的高增益线性插值在仿真中容易振动。
   static constexpr double STANDUP_KP = 50.0;
   static constexpr double STANDUP_KD = 3.5;
   static constexpr double STANDUP_KP_START = 20.0;
   static constexpr double STANDUP_TANH_SCALE = 1.2;
-  static constexpr double SAFETY_TILT_MAX = 1.05;
+  static constexpr double DEFAULT_SAFETY_TILT_LIMIT_RAD = 0.70;
+  static constexpr double DEFAULT_LOWSTATE_TIMEOUT_SEC = 0.20;
+
+  // PD 增益，可在 run() 前覆盖；默认从策略文件自动加载。
+  double kp = 35.0;
+  double kd = 0.5;
+
+  // 实机安全参数，可由命令行覆盖。
+  double safety_tilt_limit_rad = DEFAULT_SAFETY_TILT_LIMIT_RAD;
+  double lowstate_timeout_sec = DEFAULT_LOWSTATE_TIMEOUT_SEC;
 
 private:
   // SDK 初始化。
@@ -137,6 +143,7 @@ private:
 
   // 观测构造与安全检查。
   Eigen::VectorXd build_obs();
+  bool check_lowstate_watchdog();
   bool check_safety();
 
   // 状态切换。
@@ -192,6 +199,7 @@ private:
   // SDK 回调可能运行在不同线程，因此使用互斥锁保护。
   mutable std::mutex sensor_mutex_;
   std::atomic<bool> state_received_{false};
+  std::chrono::steady_clock::time_point last_lowstate_time_{};
 
   // 传感器缓存，访问时需要持有 sensor_mutex_。
   Eigen::Matrix<double, 12, 1> hw_pos_ = Eigen::Matrix<double, 12, 1>::Zero();

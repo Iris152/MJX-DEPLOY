@@ -209,6 +209,10 @@ def run_cmd(args: argparse.Namespace) -> int:
         cmd.extend(["--kp", str(args.kp)])
     if args.kd is not None:
         cmd.extend(["--kd", str(args.kd)])
+    if args.tilt_limit_deg is not None:
+        cmd.extend(["--tilt-limit-deg", str(args.tilt_limit_deg)])
+    if args.lowstate_timeout is not None:
+        cmd.extend(["--lowstate-timeout", str(args.lowstate_timeout)])
 
     print("Policy: AHAC adaptive horizon, ahac_20260828_180341")
     print("Command:")
@@ -349,6 +353,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p_run.add_argument("--jobs", type=int, default=os.cpu_count(), help="Parallel build jobs")
     p_run.add_argument("--kp", type=float, help="Override walking kp")
     p_run.add_argument("--kd", type=float, help="Override walking kd")
+    p_run.add_argument("--tilt-limit-deg", type=float, help="Override tilt safety limit in degrees")
+    p_run.add_argument("--lowstate-timeout", type=float, help="Override LowState watchdog timeout in seconds; <=0 disables")
     p_run.add_argument("--dry-run", action="store_true", help="Print launch command without sending motor commands")
     p_run.set_defaults(func=run_cmd)
 

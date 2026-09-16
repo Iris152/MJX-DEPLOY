@@ -9,6 +9,7 @@
 #include "policy.hpp"
 
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -21,6 +22,8 @@ static void print_usage(const char *prog) {
             << "  --domain-id <id>      DDS domain ID (default: 0)\n"
             << "  --kp <value>          Override walk kp\n"
             << "  --kd <value>          Override walk kd\n"
+            << "  --tilt-limit-deg <v> Safety tilt limit in degrees (default: 40)\n"
+            << "  --lowstate-timeout <s> LowState watchdog timeout; <=0 disables (default: 0.20)\n"
             << "  --command-source <s>  terminal, wireless, or ros2 (default: terminal)\n"
             << "  --cmd-topic <topic>   ROS2 PointStamped cmd topic (default: "
                "/velocity_command)\n"
@@ -36,6 +39,8 @@ int main(int argc, char **argv) {
   std::string interface = "lo";
   int domain_id = 0;
   double kp_override = -1, kd_override = -1;
+  double tilt_limit_deg = -1.0;
+  double lowstate_timeout = -1.0;
   jave::CommandSource command_source = jave::CommandSource::TERMINAL;
   std::string cmd_topic = "/velocity_command";
 
@@ -51,6 +56,10 @@ int main(int argc, char **argv) {
       kp_override = std::atof(argv[++i]);
     else if (arg == "--kd" && i + 1 < argc)
       kd_override = std::atof(argv[++i]);
+    else if (arg == "--tilt-limit-deg" && i + 1 < argc)
+      tilt_limit_deg = std::atof(argv[++i]);
+    else if (arg == "--lowstate-timeout" && i + 1 < argc)
+      lowstate_timeout = std::atof(argv[++i]);
     else if (arg == "--command-source" && i + 1 < argc) {
       std::string value = argv[++i];
       if (value == "terminal")
@@ -94,6 +103,14 @@ int main(int argc, char **argv) {
   if (kd_override > 0) {
     controller.kd = kd_override;
     std::cout << "  Override kd=" << kd_override << "\n";
+  }
+  if (tilt_limit_deg > 0) {
+    controller.safety_tilt_limit_rad = tilt_limit_deg * M_PI / 180.0;
+    std::cout << "  Override tilt safety=" << tilt_limit_deg << " deg\n";
+  }
+  if (lowstate_timeout >= 0) {
+    controller.lowstate_timeout_sec = lowstate_timeout;
+    std::cout << "  Override LowState watchdog=" << lowstate_timeout << "s\n";
   }
 
   controller.run();

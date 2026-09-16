@@ -281,6 +281,7 @@ void Go2Deploy::LowStateHandler(const void *message) {
   imu_quat_ << imu.quaternion()[0], imu.quaternion()[1], imu.quaternion()[2],
       imu.quaternion()[3];
   imu_gyro_ << imu.gyroscope()[0], imu.gyroscope()[1], imu.gyroscope()[2];
+  last_lowstate_time_ = std::chrono::steady_clock::now();
 
   if (command_source_ == CommandSource::WIRELESS) {
     const auto &remote = msg.wireless_remote();
@@ -344,6 +345,18 @@ void Go2Deploy::LowCmdWrite() {
   }
 
   ++motiontime_;
+
+  if (!check_lowstate_watchdog()) {
+    handle_estop();
+    publish_cmd();
+    return;
+  }
+
+  if (state_.load() == State::READY && !check_safety()) {
+    handle_estop();
+    publish_cmd();
+    return;
+  }
 
   switch (state_.load()) {
   case State::IDLE:
@@ -412,8 +425,10 @@ void Go2Deploy::handle_ready() {
 
 void Go2Deploy::handle_walking() {
   if (motiontime_ % policy_decimation_ == 0) {
-    if (!check_safety())
+    if (!check_safety()) {
+      handle_estop();
       return;
+    }
 
     Eigen::VectorXd obs = build_obs();
     Eigen::VectorXd action = (*policy_)(obs);
@@ -549,18 +564,57 @@ Eigen::VectorXd Go2Deploy::build_obs() {
 
 // 安全检查。
 
+bool Go2Deploy::check_lowstate_watchdog() {
+  const State current = state_.load();
+  if ((current != State::READY && current != State::WALKING) ||
+      lowstate_timeout_sec <= 0.0) {
+    return true;
+  }
+
+  double age_sec = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(sensor_mutex_);
+    if (!state_received_.load(std::memory_order_acquire))
+      return true;
+    age_sec = std::chrono::duration<double>(
+                  std::chrono::steady_clock::now() - last_lowstate_time_)
+                  .count();
+  }
+
+  if (age_sec > lowstate_timeout_sec) {
+    std::cout << "\n  SAFETY: LowState timeout " << age_sec << "s > "
+              << lowstate_timeout_sec << "s\n";
+    transition(State::ESTOP);
+    return false;
+  }
+
+  return true;
+}
+
 bool Go2Deploy::check_safety() {
   Eigen::Vector4d quat;
   {
     std::lock_guard<std::mutex> lock(sensor_mutex_);
     quat = imu_quat_;
   }
+
+  const double qnorm = quat.norm();
+  if (!std::isfinite(qnorm) || qnorm < 1e-6) {
+    std::cout << "\n  SAFETY: invalid IMU quaternion\n";
+    transition(State::ESTOP);
+    return false;
+  }
+  quat /= qnorm;
+
   Eigen::Vector3d gravity =
       quat_rotate(Eigen::Vector3d(0, 0, -1), quat_inv(quat));
-  double tilt = std::sqrt(gravity(0) * gravity(0) + gravity(1) * gravity(1));
+  const double lateral = std::sqrt(gravity(0) * gravity(0) +
+                                   gravity(1) * gravity(1));
+  const double tilt_rad = std::atan2(lateral, -gravity(2));
 
-  if (tilt > SAFETY_TILT_MAX) {
-    double deg = std::asin(std::min(tilt, 1.0)) * 180.0 / M_PI;
+  if (!std::isfinite(tilt_rad) || tilt_rad > safety_tilt_limit_rad) {
+    constexpr double RAD_TO_DEG = 180.0 / 3.14159265358979323846;
+    double deg = tilt_rad * RAD_TO_DEG;
     std::cout << "\n  SAFETY: tilt " << deg << " deg\n";
     transition(State::ESTOP);
     return false;
