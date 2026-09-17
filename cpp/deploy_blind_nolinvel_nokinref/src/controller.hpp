@@ -147,6 +147,7 @@ private:
   bool check_safety();
 
   // 状态切换。
+  void return_to_stand();
   void transition(State to);
 
   // 键盘输入处理。
@@ -206,6 +207,7 @@ private:
   Eigen::Matrix<double, 12, 1> hw_vel_ = Eigen::Matrix<double, 12, 1>::Zero();
   Eigen::Vector4d imu_quat_ = Eigen::Vector4d(1, 0, 0, 0);
   Eigen::Vector3d imu_gyro_ = Eigen::Vector3d::Zero();
+  bool wireless_x_pressed_ = false;
 
   // SDK 句柄，仅在 controller.cpp 内部使用。
   // 这里使用前向声明，避免在头文件中引入 SDK 头文件。

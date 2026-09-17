@@ -218,7 +218,7 @@ def run_cmd(args: argparse.Namespace) -> int:
     print("Command:")
     separator = " \\" + "\n  "
     print("  " + separator.join(cmd))
-    print("Controls: Enter=stand, Enter=walk, w/s=vx, a/d=vy, q/e=yaw, 0=zero, x=estop, Ctrl-C=sit down")
+    print("Controls: Enter=stand, Enter=walk, w/s=vx, a/d=vy, q/e=yaw, 0=zero, x=zero+stand, Ctrl-C=sit down")
     if args.dry_run:
         return 0
     sys.stdout.flush()

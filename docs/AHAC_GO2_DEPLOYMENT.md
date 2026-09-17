@@ -134,9 +134,9 @@ python -m mjx_deploy.ahac_go2_deploy run \
 ```
 
 Then press empty Enter twice to move through `IDLE -> STANDUP -> READY ->
-WALKING`, use `w/s/a/d/q/e/0` to test commands, use `x` for `ESTOP`, and use
-`Ctrl-C` to test sit-down. See `docs/AHAC_MUJOCO_SDK2_SIM_TEST.md` for the full
-checklist and viewer controls.
+WALKING`, use `w/s/a/d/q/e/0` to test commands, use `x` to zero the command and
+return smoothly to the policy stand pose, and use `Ctrl-C` to test sit-down. See
+`docs/AHAC_MUJOCO_SDK2_SIM_TEST.md` for the full checklist and viewer controls.
 
 The simulator starts from `prone` by default. After `Ctrl-C`, the deployment
 controller sends the sit-down trajectory and the simulator holds the final
@@ -215,7 +215,7 @@ Terminal operation is line based:
 | `q` + Enter | increase yaw rate left by `+0.1 rad/s` |
 | `e` + Enter | decrease yaw rate right by `-0.1 rad/s` |
 | `0` + Enter | zero all velocity commands |
-| `x` + Enter | emergency stop and hold current joints |
+| `x` + Enter | zero all velocity commands and smoothly return to the policy stand pose |
 | `Ctrl-C` | sit down and exit |
 
 Recommended first test:
@@ -247,6 +247,7 @@ Stick mapping:
 - Left stick Y: forward/backward `vx`.
 - Left stick X: lateral `vy`.
 - Right stick X: yaw rate.
+- Remote `X`: zero all velocity commands and smoothly return to the policy stand pose.
 - Release sticks to return commands toward zero.
 
 For ROS2 command-topic control, build with ROS2 and run:

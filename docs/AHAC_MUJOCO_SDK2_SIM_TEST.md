@@ -8,7 +8,8 @@
 - `STANDUP`：部署控制器从当前关节插值到策略默认站立姿态。
 - `READY`：站立完成后保持默认姿态，等待进入行走。
 - `WALKING`：AHAC 策略 50 Hz 推理，500 Hz 发送目标关节，仿真器实时执行。
-- `ESTOP`：终端输入 `x` 后部署控制器保持当前关节。
+- `RETURN TO STAND`：终端输入 `x` 后先清零速度指令，再从当前关节平滑回到策略默认站立姿态，完成后停在 `READY`。
+- `ESTOP`：仅由 tilt safety、LowState watchdog 等安全保护触发，触发后保持当前关节。
 - `SITDOWN`：`Ctrl-C` 或输入结束后触发平滑坐下；仿真器保持最后的 crouch 目标，不再回到站立姿态。
 
 ## 2. 安装依赖
@@ -123,7 +124,7 @@ python -m mjx_deploy.ahac_go2_deploy run \
 | `q` | `yaw += 0.1 rad/s` |
 | `e` | `yaw -= 0.1 rad/s` |
 | `0` | 三个速度指令清零 |
-| `x` | 进入 `ESTOP` 并保持当前关节 |
+| `x` | 三个速度指令清零，并从当前动作平滑回到站立姿态 |
 | `Ctrl-C` | 平滑坐下并退出 |
 
 建议第一轮按这个顺序验证：

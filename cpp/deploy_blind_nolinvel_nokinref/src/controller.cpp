@@ -295,6 +295,12 @@ void Go2Deploy::update_wireless_command(const uint8_t *data, std::size_t size) {
   if (size < 24)
     return;
 
+  const bool x_pressed = ((data[3] >> 2) & 1) != 0;
+  if (x_pressed && !wireless_x_pressed_) {
+    return_to_stand();
+  }
+  wireless_x_pressed_ = x_pressed;
+
   auto read_float = [data](std::size_t offset) {
     float value = 0.0f;
     std::memcpy(&value, data + offset, sizeof(float));
@@ -312,7 +318,8 @@ void Go2Deploy::update_wireless_command(const uint8_t *data, std::size_t size) {
   const double vx = ly * policy_->cmd_vel_x_range(1);
   const double vy = -lx * policy_->cmd_vel_y_range(1);
   const double wz = -rx * policy_->cmd_yaw_rate_range(1);
-  set_cmd(vx, vy, wz);
+  if (state_.load() == State::WALKING)
+    set_cmd(vx, vy, wz);
 }
 
 // 电机指令辅助函数。
@@ -624,6 +631,25 @@ bool Go2Deploy::check_safety() {
 
 // 状态切换。
 
+void Go2Deploy::return_to_stand() {
+  set_cmd(0.0, 0.0, 0.0);
+
+  const State current = state_.load();
+  if (current == State::ESTOP) {
+    std::cout << "  In ESTOP. Restart to continue.\n";
+    return;
+  }
+
+  if (current == State::READY) {
+    walking_target_hw_ = sim_to_hw(policy_->default_joints);
+    std::cout << "  cmd: zeroed, already at stand pose\n";
+    return;
+  }
+
+  std::cout << "  cmd: zeroed, returning to stand pose\n";
+  transition(State::STANDUP);
+}
+
 void Go2Deploy::transition(State to) {
   std::cout << "  State: " << state_name(state_.load()) << " -> "
             << state_name(to) << "\n";
@@ -699,7 +725,7 @@ void Go2Deploy::process_key(const std::string &key) {
     else if (s == State::ESTOP)
       std::cout << "  In ESTOP. Restart to continue.\n";
   } else if (key == "x") {
-    transition(State::ESTOP);
+    return_to_stand();
   } else if (key == "w") {
     set_cmd(cmd(0) + S, cmd(1), cmd(2));
     std::cout << "  vx=" << get_cmd()(0) << "\n";
@@ -802,7 +828,7 @@ void Go2Deploy::run() {
   std::cout
       << "  Robot state received!\n\n"
       << "  State: IDLE (zero torque, joints free)\n"
-      << "  Controls: Enter=advance  x=estop  w/s a/d q/e=vel  0=zero\n\n";
+      << "  Controls: Enter=advance  x=zero+stand  w/s a/d q/e=vel  0=zero\n\n";
 
   // 命令线程已经由 CreateRecurrentThreadEx 启动。
 
